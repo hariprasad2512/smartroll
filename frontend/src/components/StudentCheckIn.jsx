@@ -1,17 +1,24 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clock3, QrCode } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, Camera, CheckCircle2, Clock3, QrCode, X } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { api, currentPath } from '../lib/api';
 
 export default function StudentCheckIn() {
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const sessionId = Number(query.get('session'));
-  const code = query.get('code') || new URLSearchParams(window.location.hash.slice(1)).get('code') || '';
+  const initialCode = query.get('code') || new URLSearchParams(window.location.hash.slice(1)).get('code') || '';
+  const [code, setCode] = useState(initialCode);
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [done, setDone] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const scannerRef = useRef(null);
+  const acceptedScanRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -30,6 +37,45 @@ export default function StudentCheckIn() {
 
   const continueToSignIn = () => window.location.assign(`/sign-in?next=${encodeURIComponent(currentPath())}`);
 
+  useEffect(() => {
+    if (!cameraOpen) return undefined;
+    acceptedScanRef.current = false;
+    let mounted = true;
+    const scanner = new Html5Qrcode('qr-recovery-reader');
+    scannerRef.current = scanner;
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      (decodedText) => {
+        if (acceptedScanRef.current) return;
+        try {
+          const scanned = new URL(decodedText);
+          const scannedCode = scanned.searchParams.get('code') || new URLSearchParams(scanned.hash.slice(1)).get('code');
+          if (scanned.origin !== window.location.origin || scanned.pathname !== '/check-in' || Number(scanned.searchParams.get('session')) !== sessionId || !/^\d{6}$/.test(scannedCode || '')) {
+            setCameraError('That QR code is not for this class. Scan the current code shown by your instructor.');
+            return;
+          }
+          acceptedScanRef.current = true;
+          setCode(scannedCode);
+          setExpired(false);
+          setFeedback('');
+          setCameraError('');
+          setCameraOpen(false);
+        } catch {
+          setCameraError('Could not read that QR code. Try again or enter the six-digit code.');
+        }
+      },
+      () => {},
+    ).catch((err) => {
+      if (mounted) setCameraError(err?.message || 'Could not open the camera. Check browser camera permissions or enter the six-digit code.');
+    });
+    return () => {
+      mounted = false;
+      if (scannerRef.current === scanner) scannerRef.current = null;
+      scanner.stop().then(() => scanner.clear()).catch(() => {});
+    };
+  }, [cameraOpen, sessionId]);
+
   const submit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
@@ -40,8 +86,14 @@ export default function StudentCheckIn() {
         body: JSON.stringify({ session_id: sessionId, totp_code: code }),
       });
       setDone(true);
+      setExpired(false);
       setFeedback(result.message);
-    } catch (err) { setFeedback(err.message); }
+    } catch (err) {
+      setFeedback(err.message);
+      const codeExpired = err.message.toLowerCase().includes('expired');
+      setExpired(codeExpired);
+      if (codeExpired) setCode('');
+    }
     finally { setSubmitting(false); }
   };
 
@@ -56,7 +108,15 @@ export default function StudentCheckIn() {
           {feedback && <div className="feedback error" role="alert">{feedback}</div>}
           {session?.is_active && <>{user ? <form onSubmit={submit}>
             <div className="signed-in-user"><span className="student-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.email}</small></span></div>
-            {user.role !== 'student' ? <div className="error-state">This account is registered for faculty access.</div> : <button className="button button-primary checkin-submit" disabled={submitting || code.length !== 6}>{submitting ? 'Recording attendance…' : <>Confirm attendance <ArrowRight size={16} /></>}</button>}
+            {user.role !== 'student' ? <div className="error-state">This account is registered for faculty access.</div> : <>
+              {expired && <div className="code-recovery">
+                <span className="eyebrow">Code expired</span>
+                <p>Scan the classroom QR again or enter the new six-digit code shown on the display.</p>
+                {!cameraOpen ? <button className="button button-secondary recovery-camera-button" type="button" onClick={() => { setCameraError(''); setCameraOpen(true); }}><Camera size={16} />Scan QR again</button> : <div className="camera-recovery"><div className="camera-recovery-head"><strong>Scan the classroom QR</strong><button className="icon-button" type="button" onClick={() => setCameraOpen(false)} aria-label="Close camera"><X size={17} /></button></div><div id="qr-recovery-reader" />{cameraError && <p className="camera-error" role="alert">{cameraError}</p>}</div>}
+                <label className="manual-code-label">Or enter the new code<input className="text-input manual-code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setFeedback(''); }} placeholder="000000" /></label>
+              </div>}
+              <button className="button button-primary checkin-submit" disabled={submitting || code.length !== 6 || cameraOpen}>{submitting ? 'Recording attendance…' : <>Confirm attendance <ArrowRight size={16} /></>}</button>
+            </>}
           </form> : <button className="button button-primary checkin-submit" onClick={continueToSignIn}>Sign in with Google <ArrowRight size={16} /></button>}
           <p className="checkin-note"><Clock3 size={13} /> This code expires shortly. Scan the classroom display again if it expires.</p></>}
         </>}
