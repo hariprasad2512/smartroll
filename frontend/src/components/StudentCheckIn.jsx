@@ -36,6 +36,11 @@ export default function StudentCheckIn() {
   }, [sessionId]);
 
   const continueToSignIn = () => window.location.assign(`/sign-in?next=${encodeURIComponent(currentPath())}`);
+  const signOutToLinkEnrollment = async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* clear the local session either way */ }
+    localStorage.removeItem('smartroll_access_token');
+    window.location.assign(`/sign-in?next=${encodeURIComponent(currentPath())}`);
+  };
 
   useEffect(() => {
     if (!cameraOpen) return undefined;
@@ -108,7 +113,7 @@ export default function StudentCheckIn() {
           {feedback && <div className="feedback error" role="alert">{feedback}</div>}
           {session?.is_active && <>{user ? <form onSubmit={submit}>
             <div className="signed-in-user"><span className="student-avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.email}</small></span></div>
-            {user.role !== 'student' ? <div className="error-state">This account is registered for faculty access.</div> : <>
+            {user.role !== 'student' ? <div className="error-state">This account is registered for faculty access.</div> : !user.enrollment_id ? <div className="feedback error enrollment-relink"><span>This account needs an Enrollment ID before you can check in.</span><button className="button button-secondary" type="button" onClick={signOutToLinkEnrollment}>Sign out and add Enrollment ID</button></div> : <>
               {expired && <div className="code-recovery">
                 <span className="eyebrow">Code expired</span>
                 <p>Scan the classroom QR again or enter the new six-digit code shown on the display.</p>

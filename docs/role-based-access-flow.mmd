@@ -1,0 +1,24 @@
+flowchart TD
+    start(["Open SmartRoll"]) --> google["Sign in with Google"]
+    google --> resolve["Verify account and load institution memberships"]
+    resolve --> global{"Global superadmin?"}
+    global -->|"Yes"| platform["Global administration across institutions"]
+    platform --> orgOps["Create institutions and assign institution admins"]
+    global -->|"No"| membership{"Institution membership found?"}
+    membership -->|"No"| noAccess["Request an invitation or enrollment"]
+    membership -->|"Yes"| institution["Select institution"]
+    institution --> role{"Role in this institution?"}
+    role -->|"Institution admin"| admin["Manage faculty, students, devices, settings, and audit log"]
+    role -->|"Faculty"| faculty["Start class and choose QR interval"]
+    faculty --> display["Display rotating QR and current code"]
+    display --> roster["Review live attendance and student history"]
+    role -->|"Student"| student["Link Google account to institution Enrollment ID"]
+    student --> checkin["Scan QR or enter current code"]
+    checkin --> validate{"Session and code valid?"}
+    validate -->|"No"| retry["Rescan or enter the latest code"]
+    retry --> checkin
+    validate -->|"Yes"| record["Record attendance for this institution"]
+    admin --> boundary["All records stay within selected institution"]
+    roster --> boundary
+    record --> boundary
+    noAccess --> boundary

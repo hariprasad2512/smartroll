@@ -8,6 +8,7 @@ SmartRoll is a web-based attendance app. Faculty sign in with Google, create a c
 - `backend/` — FastAPI API using SQLAlchemy and PostgreSQL
 - [UI/UX specification](UI_UX_SPEC.md)
 - [Deployment guide](DEPLOYMENT.md) — Cloudflare Pages, Render, and Supabase free tiers
+- [Product pitch PDF](docs/SmartRoll_Product_Brief.pdf) and [role access flowchart source](docs/role-based-access-flow.mmd)
 
 ## Run locally
 
