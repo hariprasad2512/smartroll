@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 
 export default function GoogleSignIn({ onCredential }) {
   const buttonRef = useRef(null);
+  const onCredentialRef = useRef(onCredential);
   const [error, setError] = useState('');
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  onCredentialRef.current = onCredential;
 
   useEffect(() => {
     if (!clientId) {
@@ -17,7 +19,7 @@ export default function GoogleSignIn({ onCredential }) {
       if (!google?.accounts?.id || !buttonRef.current) return false;
       google.accounts.id.initialize({
         client_id: clientId,
-        callback: ({ credential }) => onCredential(credential),
+        callback: ({ credential }) => onCredentialRef.current(credential),
       });
       google.accounts.id.renderButton(buttonRef.current, {
         theme: 'outline', size: 'large', shape: 'rectangular', text: 'continue_with', width: 320,
@@ -30,7 +32,7 @@ export default function GoogleSignIn({ onCredential }) {
       }, 150);
     }
     return () => { mounted = false; window.clearInterval(interval); };
-  }, [clientId, onCredential]);
+  }, [clientId]);
 
   return <div className="google-signin-wrap">
     <div className="google-signin-button" ref={buttonRef} />

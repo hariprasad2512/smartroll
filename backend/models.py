@@ -10,6 +10,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     roll_number = Column(String, unique=True, index=True, nullable=False)
+    enrollment_id = Column(String, unique=True, index=True, nullable=True)
     role = Column(String, default="STUDENT")  # "STUDENT" or "TEACHER"
 
     attendances = relationship("Attendance", back_populates="student")
@@ -44,6 +45,7 @@ class Session(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, default="Class session")
     totp_secret = Column(String, nullable=False)
+    interval_seconds = Column(Integer, default=60, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=True)

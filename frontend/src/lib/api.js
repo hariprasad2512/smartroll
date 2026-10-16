@@ -41,10 +41,10 @@ export async function api(path, options = {}) {
   return data;
 }
 
-export async function signInWithGoogle(credential) {
+export async function signInWithGoogle(credential, enrollmentId) {
   const result = await api('/api/auth/google', {
     method: 'POST',
-    body: JSON.stringify({ credential, device_id: deviceId() }),
+    body: JSON.stringify({ credential, device_id: deviceId(), enrollment_id: enrollmentId || null }),
   });
   localStorage.setItem('smartroll_access_token', result.access_token);
   return result.user;

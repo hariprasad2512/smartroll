@@ -25,6 +25,8 @@ When Render prompts for Blueprint environment variables, set:
 
 The API must be publicly reachable by the browser; faculty and student endpoints enforce authorization. Copy the deployed `onrender.com` URL for the frontend's `VITE_API_URL`.
 
+On startup, the API adds the session interval and student Enrollment ID columns to an existing database. Existing sessions keep the previous 30-second QR interval; new sessions default to 60 seconds. Students link an Enrollment ID the next time they sign in. IDs are normalized to uppercase and must be unique.
+
 Render Free services sleep after 15 minutes without inbound traffic and can take about a minute to wake on the next request. [Render Free limits](https://render.com/docs/free)
 
 ## 3. Deploy the frontend to Cloudflare Pages

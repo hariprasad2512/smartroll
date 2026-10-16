@@ -49,6 +49,8 @@ h1,h2,h3,p { margin-top: 0; }
 .text-input::placeholder { color: #a9afa7; }
 .start-session-form { display: flex; align-items: center; gap: 8px; }
 .session-title-input { width: 205px; }
+.interval-select-label { display: flex; flex-direction: column; gap: 3px; color: #7b8179; font-size: 10px; white-space: nowrap; }
+.interval-select { width: 126px; height: 42px; padding: 0 8px; font-size: 12px; }
 .error-state { margin: 16px 0; padding: 12px 14px; border: 1px solid #eed9d5; background: #fff8f6; border-radius: 8px; color: var(--error); font-size: 13px; }
 .site-footer { width: 100%; display: flex; justify-content: space-between; padding: 18px max(24px, calc((100vw - 1180px)/2)); color: #91968f; font-size: 12px; border-top: 1px solid var(--border); background: #fff; }
 .faculty-page-header { margin-bottom: 30px; }
@@ -64,6 +66,8 @@ h1,h2,h3,p { margin-top: 0; }
 .roster-count { display: inline-flex; align-items: center; gap: 6px; color: #737b72; font-size: 12px; background: #f3f5f1; border-radius: 20px; padding: 6px 10px; }
 .roster-list { max-height: min(560px, 62vh); overflow: auto; }
 .roster-row { display: flex; align-items: center; gap: 12px; padding: 13px 24px; border-bottom: 1px solid #f0f2ef; }
+.roster-row-button { width: 100%; text-align: left; color: inherit; background: #fff; border: 0; font: inherit; cursor: pointer; }
+.roster-row-button:hover, .student-profile-link:hover { background: #f8faf7; }
 .student-avatar { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; display: grid; place-items: center; color: #3e6345; background: #eef3ed; font-size: 14px; font-weight: 600; }
 .student-meta { min-width: 0; flex: 1; }
 .student-meta strong { display: block; font-size: 13px; font-weight: 600; }
@@ -149,6 +153,25 @@ h1,h2,h3,p { margin-top: 0; }
 .device-state { color: #9a6a32; font-size: 11px; white-space: nowrap; }
 .device-state.registered { color: #557258; }
 .device-reset { min-height: 34px; font-size: 11px; padding: 0 10px; }
+.student-profile-link { border: 0; padding: 7px; margin: -7px; border-radius: 7px; text-align: left; color: inherit; background: transparent; cursor: pointer; }
+.student-profile-backdrop { position: fixed; inset: 0; z-index: 20; background: #17201a66; display: grid; place-items: center; padding: 20px; }
+.student-profile { position: relative; width: min(100%, 480px); max-height: min(80vh, 720px); overflow: auto; padding: 27px; }
+.student-profile-close { position: absolute; top: 14px; right: 14px; }
+.student-profile h2 { margin: 8px 0 3px; font-size: 22px; letter-spacing: -.03em; }
+.profile-enrollment { color: var(--muted); font-size: 12px; }
+.profile-attendance-total { display: flex; align-items: baseline; gap: 9px; padding: 15px; border-radius: 9px; background: #f4f6f2; margin: 18px 0 22px; }
+.profile-attendance-total strong { font-size: 24px; }
+.profile-attendance-total span { color: var(--muted); font-size: 12px; }
+.student-profile h3 { margin: 0 0 10px; font-size: 13px; }
+.profile-attendance-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--border); }
+.profile-attendance-list li { padding: 12px 2px; border-bottom: 1px solid var(--border); }
+.profile-attendance-list strong, .profile-attendance-list small { display: block; }
+.profile-attendance-list strong { font-size: 13px; }
+.profile-attendance-list small { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.profile-empty { color: var(--muted); font-size: 12px; }
+.enrollment-input-label { display: block; margin: 0 0 15px; color: #5f665e; font-size: 12px; font-weight: 600; }
+.enrollment-input-label span { color: #92978f; font-weight: 400; }
+.enrollment-input { display: block; margin-top: 7px; }
 .display-ended { margin: auto; text-align: center; }
 .display-ended h1 { font-size: 30px; letter-spacing: -.04em; margin: 10px 0; }
 .display-ended p { color: var(--muted); font-size: 13px; margin-bottom: 20px; }

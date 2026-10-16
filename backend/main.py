@@ -9,7 +9,8 @@ import pyotp
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session as DBSession
 
 load_dotenv()
@@ -18,6 +19,16 @@ from database import Base, engine, get_db
 import models
 
 Base.metadata.create_all(bind=engine)
+
+# create_all does not add columns to an existing deployment. Preserve the old
+# 30-second cadence for sessions already in progress; new sessions default to 60.
+with engine.begin() as connection:
+    inspector = inspect(connection)
+    if "interval_seconds" not in {column["name"] for column in inspector.get_columns("sessions")}:
+        connection.execute(text("ALTER TABLE sessions ADD COLUMN interval_seconds INTEGER NOT NULL DEFAULT 30"))
+    if "enrollment_id" not in {column["name"] for column in inspector.get_columns("users")}:
+        connection.execute(text("ALTER TABLE users ADD COLUMN enrollment_id VARCHAR"))
+    connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_enrollment_id ON users (enrollment_id)"))
 
 app = FastAPI(title="SmartRoll Attendance API", version="2.0.0")
 cors_origins = [
@@ -40,6 +51,7 @@ TOTP_INTERVAL = 30
 class GoogleSignInRequest(BaseModel):
     credential: str
     device_id: str = Field(min_length=20, max_length=80)
+    enrollment_id: str | None = Field(default=None, max_length=50)
 
 
 class AttendanceRequest(BaseModel):
@@ -49,6 +61,13 @@ class AttendanceRequest(BaseModel):
 
 class StartSessionRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
+    interval_seconds: int = Field(default=60, description="QR refresh interval: 30, 60, 90, or 120 seconds")
+
+    @field_validator("interval_seconds")
+    def validate_interval(cls, value):
+        if value not in (30, 60, 90, 120):
+            raise ValueError("Choose a QR refresh interval of 30, 60, 90, or 120 seconds.")
+        return value
 
 
 def faculty_emails():
@@ -75,6 +94,7 @@ def identity_payload(user, identity):
         "id": user.id,
         "name": user.name,
         "email": identity.email,
+        "enrollment_id": user.enrollment_id,
         "role": "faculty" if user.role == "TEACHER" else "student",
         "device_registered": bool(identity.device_id),
     }
@@ -112,6 +132,8 @@ def require_student(auth=Depends(require_user)):
     user, identity, token_hash = auth
     if user.role != "STUDENT":
         raise HTTPException(status_code=403, detail="This check-in is for student accounts.")
+    if not user.enrollment_id:
+        raise HTTPException(status_code=403, detail="Sign out and sign in again with your Enrollment ID to continue.")
     return auth
 
 
@@ -122,7 +144,7 @@ def attendance_record(db, attendance):
         "id": attendance.id,
         "student_id": student.id,
         "student_name": student.name,
-        "roll_number": identity.email if identity else student.roll_number,
+        "enrollment_id": student.enrollment_id or "Enrollment ID pending",
         "google_identity_id": identity.id if identity else None,
         "timestamp": attendance.timestamp.isoformat() + "Z" if attendance.timestamp else None,
     }
@@ -133,7 +155,7 @@ def student_identity_for_user(db, user_id):
 
 
 def session_payload(db, session, include_code=True):
-    _, code, remaining = get_current_totp(session.totp_secret)
+    _, code, remaining = get_current_totp(session.totp_secret, session.interval_seconds)
     attendances = db.query(models.Attendance).filter(
         models.Attendance.session_id == session.id
     ).order_by(models.Attendance.timestamp.desc()).all()
@@ -142,7 +164,7 @@ def session_payload(db, session, include_code=True):
         "title": session.title,
         "is_active": session.is_active,
         "time_remaining": remaining,
-        "interval": TOTP_INTERVAL,
+        "interval": session.interval_seconds,
         "total_students_present": len(attendances),
         "students": [attendance_record(db, item) for item in attendances],
     }
@@ -151,10 +173,10 @@ def session_payload(db, session, include_code=True):
     return result
 
 
-def get_current_totp(secret: str):
-    totp = pyotp.TOTP(secret, interval=TOTP_INTERVAL)
+def get_current_totp(secret: str, interval: int = TOTP_INTERVAL):
+    totp = pyotp.TOTP(secret, interval=interval)
     now = int(time.time())
-    return totp, totp.now(), TOTP_INTERVAL - (now % TOTP_INTERVAL)
+    return totp, totp.now(), interval - (now % interval)
 
 
 @app.get("/")
@@ -170,6 +192,7 @@ def google_sign_in(req: GoogleSignInRequest, db: DBSession = Depends(get_db)):
     sub = claims["sub"]
     email = claims["email"].strip().lower()
     is_faculty = email in faculty_emails()
+    enrollment_id = req.enrollment_id.strip().upper() if req.enrollment_id else None
 
     identity = db.query(models.GoogleIdentity).filter(models.GoogleIdentity.google_sub == sub).first()
     if identity:
@@ -178,6 +201,14 @@ def google_sign_in(req: GoogleSignInRequest, db: DBSession = Depends(get_db)):
             raise HTTPException(status_code=409, detail="Account needs administrator repair.")
         if identity.device_id and identity.device_id != req.device_id:
             raise HTTPException(status_code=409, detail="This Google account is already registered on another device. Ask faculty to reset the device before moving.")
+        if not is_faculty and not user.enrollment_id:
+            if not enrollment_id:
+                raise HTTPException(status_code=422, detail="Enter your Enrollment ID to link it to this Google account.")
+            if db.query(models.User).filter(models.User.enrollment_id == enrollment_id).first():
+                raise HTTPException(status_code=409, detail="That Enrollment ID is already linked to another account. Check the ID or ask faculty for help.")
+            user.enrollment_id = enrollment_id
+        elif not is_faculty and enrollment_id and enrollment_id != user.enrollment_id:
+            raise HTTPException(status_code=409, detail="This Google account is already linked to a different Enrollment ID.")
         if identity.device_id is None:
             used = db.query(models.GoogleIdentity).filter(models.GoogleIdentity.device_id == req.device_id).first()
             if used:
@@ -187,12 +218,17 @@ def google_sign_in(req: GoogleSignInRequest, db: DBSession = Depends(get_db)):
         user.name = claims.get("name") or user.name
         user.role = "TEACHER" if is_faculty else "STUDENT"
     else:
+        if not is_faculty and not enrollment_id:
+            raise HTTPException(status_code=422, detail="Enter your Enrollment ID to link it to this Google account.")
+        if enrollment_id and db.query(models.User).filter(models.User.enrollment_id == enrollment_id).first():
+            raise HTTPException(status_code=409, detail="That Enrollment ID is already linked to another account. Check the ID or ask faculty for help.")
         used = db.query(models.GoogleIdentity).filter(models.GoogleIdentity.device_id == req.device_id).first()
         if used:
             raise HTTPException(status_code=409, detail="This device is already registered to another account.")
         user = models.User(
             name=claims.get("name") or email.split("@")[0],
             roll_number=f"GOOGLE-{sub}",
+            enrollment_id=None if is_faculty else enrollment_id,
             role="TEACHER" if is_faculty else "STUDENT",
         )
         db.add(user)
@@ -241,7 +277,7 @@ def start_faculty_session(req: StartSessionRequest, auth=Depends(require_faculty
     user, _, _ = auth
     for old in db.query(models.Session).filter(models.Session.is_active.is_(True), models.Session.teacher_id == user.id).all():
         old.is_active = False
-    session = models.Session(title=req.title.strip(), totp_secret=pyotp.random_base32(), is_active=True, teacher_id=user.id)
+    session = models.Session(title=req.title.strip(), totp_secret=pyotp.random_base32(), interval_seconds=req.interval_seconds, is_active=True, teacher_id=user.id)
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -272,9 +308,9 @@ def get_classroom_display(session_id: int, auth=Depends(require_faculty), db: DB
     session = db.query(models.Session).filter(models.Session.id == session_id, models.Session.teacher_id == user.id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Class session not found.")
-    _, code, remaining = get_current_totp(session.totp_secret)
+    _, code, remaining = get_current_totp(session.totp_secret, session.interval_seconds)
     return {"session_id": session.id, "title": session.title, "is_active": session.is_active,
-            "totp_code": code, "time_remaining": remaining, "interval": TOTP_INTERVAL}
+            "totp_code": code, "time_remaining": remaining, "interval": session.interval_seconds}
 
 
 @app.post("/api/faculty/sessions/{session_id}/end")
@@ -302,7 +338,7 @@ async def mark_student_attendance(req: AttendanceRequest, auth=Depends(require_s
     session = db.query(models.Session).filter(models.Session.id == req.session_id).first()
     if not session or not session.is_active:
         raise HTTPException(status_code=410, detail="This class session has ended.")
-    totp, _, _ = get_current_totp(session.totp_secret)
+    totp, _, _ = get_current_totp(session.totp_secret, session.interval_seconds)
     if not totp.verify(req.totp_code, valid_window=0):
         raise HTTPException(status_code=400, detail="This check-in code has expired. Scan the current classroom code.")
     existing = db.query(models.Attendance).filter(
@@ -337,6 +373,42 @@ def list_student_accounts(auth=Depends(require_faculty), db: DBSession = Depends
     return {"students": [{
         "identity_id": identity.id,
         "name": identity.user.name,
-        "email": identity.email,
+        "enrollment_id": identity.user.enrollment_id,
         "device_registered": bool(identity.device_id),
     } for identity in identities]}
+
+
+@app.get("/api/faculty/students/{identity_id}")
+def get_student_profile(identity_id: int, auth=Depends(require_faculty), db: DBSession = Depends(get_db)):
+    faculty, _, _ = auth
+    identity = db.query(models.GoogleIdentity).join(models.User).filter(
+        models.GoogleIdentity.id == identity_id,
+        models.User.role == "STUDENT",
+    ).first()
+    if not identity:
+        raise HTTPException(status_code=404, detail="Student account not found.")
+    records = db.query(models.Attendance).join(models.Session).filter(
+        models.Attendance.student_id == identity.user_id,
+        models.Session.teacher_id == faculty.id,
+    ).order_by(models.Attendance.timestamp.desc()).all()
+    seen_sessions = set()
+    unique_records = []
+    for record in records:
+        if record.session_id not in seen_sessions:
+            seen_sessions.add(record.session_id)
+            unique_records.append(record)
+    records = unique_records
+    return {
+        "student": {
+            "identity_id": identity.id,
+            "name": identity.user.name,
+            "enrollment_id": identity.user.enrollment_id,
+            "classes_attended": len(records),
+            "device_registered": bool(identity.device_id),
+        },
+        "attendance": [{
+            "session_id": record.session_id,
+            "class_name": record.session.title,
+            "timestamp": record.timestamp.isoformat() + "Z" if record.timestamp else None,
+        } for record in records],
+    }
