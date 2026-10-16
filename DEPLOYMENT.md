@@ -1,0 +1,60 @@
+# SmartRoll deployment
+
+This monorepo deploys the Vite frontend to Cloudflare Pages, the FastAPI backend to Render, and uses Supabase for PostgreSQL. Each hosting service is configured on its free tier.
+
+## 1. Create the Supabase database
+
+1. Create a Supabase project in the Singapore region and select the Free plan.
+2. Open **Connect → ORMs → SQLAlchemy** or **Project Settings → Database → Connection string** and select the **Session pooler** URL for `DATABASE_URL`. The Render API is a long-running service. Keep `sslmode=require` and URL-encode special characters in the password.
+3. The application creates its SQLAlchemy tables at startup. Do not use SQLite in a deployed service because Render's local filesystem is ephemeral.
+
+Supabase Free projects may be paused after seven days of low activity and do not include automatic backups. Export attendance records regularly if they need to be retained. [Supabase Free project pausing](https://supabase.com/docs/guides/platform/free-project-pausing) · [Supabase pricing](https://supabase.com/pricing)
+
+## 2. Deploy the API to Render
+
+Create a Blueprint from the `hariprasad2512/smartroll` repository. Render uses the top-level `render.yaml`, which builds `backend/Dockerfile`, selects the Free plan, deploys in Singapore, and checks `/health`.
+
+When Render prompts for Blueprint environment variables, set:
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | Supabase Session Pooler URL with `sslmode=require` |
+| `GOOGLE_CLIENT_ID` | The Google OAuth Web client ID |
+| `FACULTY_EMAILS` | Comma-separated faculty Google account emails |
+| `CORS_ORIGINS` | Exact Pages origin, e.g. `https://smartroll.pages.dev`; add the custom domain too if used |
+
+The API must be publicly reachable by the browser; faculty and student endpoints enforce authorization. Copy the deployed `onrender.com` URL for the frontend's `VITE_API_URL`.
+
+Render Free services sleep after 15 minutes without inbound traffic and can take about a minute to wake on the next request. [Render Free limits](https://render.com/docs/free)
+
+## 3. Deploy the frontend to Cloudflare Pages
+
+Connect `hariprasad2512/smartroll` to Pages and use these build settings:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | Vite |
+| Root directory | `frontend` |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Node version | `20` |
+
+Set these Pages build environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `VITE_API_URL` | Deployed Render service URL, no trailing slash |
+| `VITE_GOOGLE_CLIENT_ID` | Same Google OAuth Web client ID as the API |
+
+`frontend/public/_redirects` provides the SPA fallback for direct links such as `/faculty`, `/student`, and QR check-in routes.
+
+## 4. Configure Google OAuth
+
+In Google Cloud Console → **APIs & Services → Credentials**, edit the OAuth Web client and add the Pages URL (for example, `https://smartroll.pages.dev`) under **Authorized JavaScript origins**. Add the custom domain origin if configured. Google Identity Services credential sign-in uses JavaScript origins; no callback URL is needed for this implementation.
+
+## 5. Verify deployment
+
+1. Open the Render API's `/health` and confirm it returns `{"status":"ok", ...}`.
+2. Sign in with a listed faculty email and confirm the app stays on `/faculty` after refresh.
+3. Start a session and open the classroom display. Scan its QR code on another device and sign in as a student.
+4. Confirm attendance appears on the faculty page and review Render logs for database or CORS errors.

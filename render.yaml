@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: smartroll-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: FACULTY_EMAILS
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

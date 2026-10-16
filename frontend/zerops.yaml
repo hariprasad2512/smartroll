@@ -1,0 +1,21 @@
+zerops:
+  - setup: frontend
+    build:
+      base: nodejs@22
+      buildCommands:
+        - npm ci
+        # Set VITE_API_URL in Zerops project env to your backend public URL,
+        # e.g. https://backend.<project>.zerops.app
+        - npm run build
+      deployFiles:
+        - dist/
+      envVariables:
+        VITE_API_URL: https://backend-2c95-8000.prg1.zerops.app
+        VITE_GOOGLE_CLIENT_ID: ${google_client_id}
+
+    run:
+      base: nodejs@22
+      ports:
+        - port: 3000
+          httpSupport: true
+      start: npx serve -s dist -l 3000
