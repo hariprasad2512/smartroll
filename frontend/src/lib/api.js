@@ -1,6 +1,12 @@
 export function apiBaseUrl() {
   const configured = import.meta.env.VITE_API_URL;
   if (configured) return configured.replace(/\/$/, '');
+  // A production frontend cannot reach a developer's localhost. Fail with a
+  // clear configuration message instead of making a request to the visitor's
+  // own device.
+  if (import.meta.env.PROD) {
+    throw new Error('The API URL is not configured for this deployment. Set VITE_API_URL to the public Render service URL and rebuild the frontend.');
+  }
   if (window.location.hostname.includes('frontend')) {
     return window.location.origin.replace('frontend', 'backend').replace('-3000', '-8000');
   }

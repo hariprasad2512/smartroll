@@ -46,6 +46,8 @@ Set these Pages build environment variables:
 | `VITE_API_URL` | Deployed Render service URL, no trailing slash |
 | `VITE_GOOGLE_CLIENT_ID` | Same Google OAuth Web client ID as the API |
 
+Set both variables in the Pages project's **Build → Environment variables** for the Production environment, then trigger a new deployment. `VITE_API_URL` must be the public URL Render assigned to `smartroll-api` (for example, `https://smartroll-api-<suffix>.onrender.com`), with no `/health` or trailing slash. These are build-time values: changing them does not update an already-built deployment until it is rebuilt. Do not use `http://localhost:8000` here; in a deployed browser that means the visitor's own computer.
+
 `frontend/public/_redirects` provides the SPA fallback for direct links such as `/faculty`, `/student`, and QR check-in routes.
 
 ## 4. Configure Google OAuth
@@ -58,3 +60,5 @@ In Google Cloud Console → **APIs & Services → Credentials**, edit the OAuth 
 2. Sign in with a listed faculty email and confirm the app stays on `/faculty` after refresh.
 3. Start a session and open the classroom display. Scan its QR code on another device and sign in as a student.
 4. Confirm attendance appears on the faculty page and review Render logs for database or CORS errors.
+
+If sign-in reports a network or fetch error, inspect the frontend request to `/api/auth/google` in the browser's Network panel. Confirm its request URL starts with the Render API URL, then confirm `CORS_ORIGINS` on Render contains the exact frontend origin shown in the address bar (scheme and hostname, without a path). After changing either frontend build variable or the backend CORS value, redeploy the corresponding service.
