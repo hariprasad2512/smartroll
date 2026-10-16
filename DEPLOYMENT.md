@@ -4,8 +4,8 @@ This monorepo deploys the Vite frontend to Cloudflare Pages, the FastAPI backend
 
 ## 1. Create the Supabase database
 
-1. Create a Supabase project in the Singapore region and select the Free plan.
-2. Open **Connect → ORMs → SQLAlchemy** or **Project Settings → Database → Connection string** and select the **Session pooler** URL for `DATABASE_URL`. The Render API is a long-running service. Keep `sslmode=require` and URL-encode special characters in the password.
+1. Use the Supabase project in Sydney (`ap-southeast-2`) and select the Free plan.
+2. The supplied endpoint is a Supabase Session Pooler URL on port `5432`. Set `DATABASE_URL` to `postgresql+psycopg2://postgres.hilydvamoleyykcnvsnk:URL_ENCODED_PASSWORD@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres?sslmode=require`. Replace the password placeholder with your URL-encoded database password. Store this URL in Render's secret environment setting and in `backend/.env` for local use; do not commit a real password.
 3. The application creates its SQLAlchemy tables at startup. Do not use SQLite in a deployed service because Render's local filesystem is ephemeral.
 
 Supabase Free projects may be paused after seven days of low activity and do not include automatic backups. Export attendance records regularly if they need to be retained. [Supabase Free project pausing](https://supabase.com/docs/guides/platform/free-project-pausing) · [Supabase pricing](https://supabase.com/pricing)
